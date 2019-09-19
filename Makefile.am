@@ -56,7 +56,8 @@ xfce4_notifyd_xfce4_notifyd_CFLAGS = \
 	$(common_cflags) \
 	$(LIBX11_CFLAGS) \
 	$(GIO_CFLAGS) \
-	$(GIO_UNIX_CFLAGS)
+	$(GIO_UNIX_CFLAGS) \
+	-lgtk-layer-shell
 
 
 xfce4_notifyd_config_xfce4_notifyd_config_CFLAGS = \

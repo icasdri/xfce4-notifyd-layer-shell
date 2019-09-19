@@ -61,7 +61,9 @@ void xfce_notify_window_set_body(XfceNotifyWindow *window,
                                  const gchar *body);
 
 void xfce_notify_window_set_geometry(XfceNotifyWindow *window,
-                                     GdkRectangle rectangle);
+                                     GtkCornerType notify_location,
+                                     GdkRectangle monitor_geom,
+                                     GdkRectangle widget_geom);
 GdkRectangle *xfce_notify_window_get_geometry(XfceNotifyWindow *window);
 
 void xfce_notify_window_set_last_monitor(XfceNotifyWindow *window,

@@ -31,6 +31,11 @@
 
 #include <libxfce4ui/libxfce4ui.h>
 
+#include <gdk/gdkx.h>
+#include <gdk/gdkwayland.h>
+
+#include <gtk-layer-shell/gtk-layer-shell.h>
+
 #include "xfce-notify-window.h"
 #include "xfce-notify-enum-types.h"
 
@@ -172,6 +177,7 @@ xfce_notify_window_class_init(XfceNotifyWindowClass *klass)
 static void
 xfce_notify_window_init(XfceNotifyWindow *window)
 {
+    GdkDisplay *display;
     GdkScreen *screen;
     GtkWidget *topvbox, *tophbox, *vbox;
     gint screen_width;
@@ -185,6 +191,12 @@ xfce_notify_window_init(XfceNotifyWindow *window)
     window->normal_opacity = DEFAULT_NORMAL_OPACITY;
     window->do_fadeout = DEFAULT_DO_FADEOUT;
     window->do_slideout = DEFAULT_DO_SLIDEOUT;
+
+    display = gtk_widget_get_display (GTK_WIDGET(window));
+    if (GDK_IS_WAYLAND_DISPLAY (display)) {
+        gtk_layer_init_for_window (GTK_WINDOW(window));
+        gtk_layer_set_layer (GTK_WINDOW(window), GTK_LAYER_SHELL_LAYER_TOP);
+    }
 
     gtk_widget_set_name (GTK_WIDGET(window), "XfceNotifyWindow");
     gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
@@ -779,11 +791,80 @@ xfce_notify_window_set_body(XfceNotifyWindow *window,
         gtk_widget_queue_draw(GTK_WIDGET(window));
 }
 
-void
-xfce_notify_window_set_geometry(XfceNotifyWindow *window,
-                                GdkRectangle rectangle)
+void xfce_notify_window_set_geometry(XfceNotifyWindow *window,
+                                     GtkCornerType notify_location,
+                                     GdkRectangle monitor_geom,
+                                     GdkRectangle widget_geom)
 {
-    window->geometry = rectangle;
+    GdkDisplay *display;
+    window->geometry = widget_geom;
+
+    display = gtk_widget_get_display (GTK_WIDGET(window));
+    if (!GDK_IS_WAYLAND_DISPLAY (display))
+        return;
+
+    switch (notify_location) {
+        case GTK_CORNER_TOP_LEFT:
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
+
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP,
+                                  widget_geom.y - monitor_geom.y);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, 0);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT,
+                                  widget_geom.x - monitor_geom.x);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
+            break;
+        case GTK_CORNER_BOTTOM_LEFT:
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, FALSE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, TRUE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
+
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, 0);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM,
+                                  monitor_geom.y + monitor_geom.height -
+                                  widget_geom.y - widget_geom.height);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT,
+                                  widget_geom.x - monitor_geom.x);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
+            break;
+        case GTK_CORNER_TOP_RIGHT:
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, FALSE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP,
+                                  widget_geom.y - monitor_geom.y);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, 0);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, 0);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT,
+                                  monitor_geom.x + monitor_geom.width -
+                                  widget_geom.x - widget_geom.width);
+            break;
+        case GTK_CORNER_BOTTOM_RIGHT:
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, FALSE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, TRUE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, FALSE);
+            gtk_layer_set_anchor (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, 0);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM,
+                                  monitor_geom.y + monitor_geom.height -
+                                  widget_geom.y - widget_geom.height);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, 0);
+            gtk_layer_set_margin (GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT,
+                                  monitor_geom.x + monitor_geom.width -
+                                  widget_geom.x - widget_geom.width);
+            break;
+        default:
+            g_warning("Invalid notify location in set geometry: %d", notify_location);
+            return;
+    }
+
 }
 
 GdkRectangle *

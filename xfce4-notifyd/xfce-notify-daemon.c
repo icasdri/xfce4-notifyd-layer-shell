@@ -795,7 +795,9 @@ xfce_notify_daemon_window_size_allocate(GtkWidget *widget,
         /* If the list is empty, there are no displayed notifications */
         DBG("No notifications on this monitor");
 
-        xfce_notify_window_set_geometry(XFCE_NOTIFY_WINDOW(widget), widget_geom);
+        xfce_notify_window_set_geometry(XFCE_NOTIFY_WINDOW(widget),
+                                        xndaemon->notify_location,
+                                        geom, widget_geom);
         xfce_notify_window_set_last_monitor(XFCE_NOTIFY_WINDOW(widget), monitor);
 
         list = g_list_prepend(list, xfce_notify_window_get_geometry(XFCE_NOTIFY_WINDOW(widget)));
@@ -920,7 +922,9 @@ xfce_notify_daemon_window_size_allocate(GtkWidget *widget,
         }
     }
 
-    xfce_notify_window_set_geometry(XFCE_NOTIFY_WINDOW(widget), widget_geom);
+    xfce_notify_window_set_geometry(XFCE_NOTIFY_WINDOW(widget),
+                                    xndaemon->notify_location,
+                                    geom, widget_geom);
     xfce_notify_window_set_last_monitor(XFCE_NOTIFY_WINDOW(widget), monitor);
 
     list = g_list_prepend(list, xfce_notify_window_get_geometry(XFCE_NOTIFY_WINDOW(widget)));
