@@ -60,6 +60,9 @@ void xfce_notify_window_set_summary(XfceNotifyWindow *window,
 void xfce_notify_window_set_body(XfceNotifyWindow *window,
                                  const gchar *body);
 
+void xfce_notify_window_set_overlay(XfceNotifyWindow *window,
+                                    const gboolean overlay);
+
 void xfce_notify_window_set_geometry(XfceNotifyWindow *window,
                                      GtkCornerType notify_location,
                                      GdkRectangle monitor_geom,

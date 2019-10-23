@@ -637,6 +637,19 @@ xfce_notify_window_set_body(XfceNotifyWindow *window,
         gtk_widget_queue_draw(GTK_WIDGET(window));
 }
 
+
+void xfce_notify_window_set_overlay(XfceNotifyWindow *window,
+                                    const gboolean overlay)
+{
+    GdkDisplay *display = gtk_widget_get_display (GTK_WIDGET(window));
+    if (!GDK_IS_WAYLAND_DISPLAY (display))
+        return;
+
+    gtk_layer_set_layer (GTK_WINDOW(window),
+                         overlay ? GTK_LAYER_SHELL_LAYER_OVERLAY
+                                 : GTK_LAYER_SHELL_LAYER_TOP);
+}
+
 void xfce_notify_window_set_geometry(XfceNotifyWindow *window,
                                      GtkCornerType notify_location,
                                      GdkRectangle monitor_geom,

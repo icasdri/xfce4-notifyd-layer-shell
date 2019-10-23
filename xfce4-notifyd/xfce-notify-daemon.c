@@ -1139,6 +1139,7 @@ notify_notify (XfceNotifyGBus *skeleton,
     gboolean value_hint_set = FALSE;
     gboolean x_canonical = FALSE;
     gboolean transient = FALSE;
+    gboolean overlay = FALSE;
     GVariant *item;
     GVariantIter iter;
     guint OUT_id = xfce_notify_daemon_generate_id(xndaemon);
@@ -1213,6 +1214,11 @@ notify_notify (XfceNotifyGBus *skeleton,
         else if (g_strcmp0 (key, "x-canonical-private-icon-only") == 0)
         {
             x_canonical = TRUE;
+            g_variant_unref(value);
+        }
+        else if (g_strcmp0 (key, "overlay") == 0)
+        {
+            overlay = TRUE;
             g_variant_unref(value);
         }
         else
@@ -1309,6 +1315,8 @@ notify_notify (XfceNotifyGBus *skeleton,
 
         g_idle_add(notify_show_window, window);
     }
+
+    xfce_notify_window_set_overlay(window, overlay);
 
     if (image_data) {
         pix = notify_pixbuf_from_image_data(image_data);
