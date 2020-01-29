@@ -1216,7 +1216,7 @@ notify_notify (XfceNotifyGBus *skeleton,
             x_canonical = TRUE;
             g_variant_unref(value);
         }
-        else if (g_strcmp0 (key, "overlay") == 0)
+        else if (g_strcmp0 (key, "x-icasdri-overlay") == 0)
         {
             overlay = TRUE;
             g_variant_unref(value);
