@@ -67,6 +67,7 @@ struct _XfceNotifyDaemon
     gint primary_monitor;
     gint log_level;
     gint log_level_apps;
+    gint log_max_size;
 
     GtkCssProvider *css_provider;
     gboolean is_default_theme;
@@ -702,8 +703,8 @@ xfce_notify_daemon_window_size_allocate(GtkWidget *widget,
     GdkDisplay *display;
     GdkDeviceManager *device_manager;
 #endif
-    gint x, y, monitor, max_width;
-    GdkRectangle *geom_tmp, geom, initial, widget_geom;
+    gint x, y, monitor, old_monitor, max_width;
+    GdkRectangle old_geom, geom, initial, widget_geom;
     GList *list;
     gboolean found = FALSE;
     static gboolean placement_data_initialized = FALSE;
@@ -717,18 +718,8 @@ xfce_notify_daemon_window_size_allocate(GtkWidget *widget,
         placement_data_initialized = TRUE;
     }
 
-    geom_tmp = xfce_notify_window_get_geometry(window);
-    if(geom_tmp->width != 0 && geom_tmp->height != 0) {
-        /* Notification has already been placed previously. Not sure if that
-         * can happen. */
-        GList *old_list;
-
-        monitor = xfce_notify_window_get_last_monitor(window);
-        old_list = xndaemon->reserved_rectangles[monitor];
-
-        old_list = g_list_remove(old_list, xfce_notify_window_get_geometry(window));
-        xndaemon->reserved_rectangles[monitor] = old_list;
-    }
+    old_geom = *xfce_notify_window_get_geometry(window);
+    old_monitor = xfce_notify_window_get_last_monitor(window);
 
     widget_screen = gtk_widget_get_screen (widget);
 #if GTK_CHECK_VERSION (3, 20, 0)
@@ -753,6 +744,24 @@ xfce_notify_daemon_window_size_allocate(GtkWidget *widget,
 
     DBG("Workarea: (%i,%i), width: %i, height:%i",
         geom.x, geom.y, geom.width, geom.height);
+
+    if(old_geom.width != 0 && old_geom.height != 0) {
+        /* Notification has already been placed previously. */
+        GdkRectangle geom_union;
+        gdk_rectangle_union(&old_geom, &geom, &geom_union);
+        if(monitor == old_monitor && allocation->width == old_geom.width && allocation->height == old_geom.height
+           && gdk_rectangle_equal(&geom, &geom_union) && p_screen == gtk_window_get_screen(GTK_WINDOW(widget)))
+        {
+            /* No updates are necessary */
+            return;
+        }
+        else
+        {
+            GList *old_list = xndaemon->reserved_rectangles[old_monitor];
+            old_list = g_list_remove(old_list, xfce_notify_window_get_geometry(window));
+            xndaemon->reserved_rectangles[old_monitor] = old_list;
+        }
+    }
 
     gtk_window_set_screen(GTK_WINDOW(widget), p_screen);
 
@@ -1089,6 +1098,9 @@ notify_update_known_applications (XfconfChannel *channel, gchar *new_app_name)
             if (!xfconf_channel_set_arrayv (channel, KNOWN_APPLICATIONS_PROP, known_applications))
                 g_warning ("Could not add a new application to the log: %s", new_app_name);
         }
+        else {
+            g_free (val);
+        }
     }
     xfconf_array_free (known_applications);
 }
@@ -1261,7 +1273,8 @@ notify_notify (XfceNotifyGBus *skeleton,
                           (xndaemon->log_level_apps == 2 && application_is_muted == TRUE)) {
                           xfce_notify_log_insert (new_app_name, summary, body,
                                                   image_data, image_path, app_icon,
-                                                  desktop_id, expire_timeout, actions);
+                                                  desktop_id, expire_timeout, actions,
+                                                  xndaemon->log_max_size);
                       }
             }
 
@@ -1339,7 +1352,9 @@ notify_notify (XfceNotifyGBus *skeleton,
         }
     }
     else if (desktop_id) {
-        xfce_notify_window_set_icon_name (window, notify_icon_name_from_desktop_id (desktop_id));
+        gchar *icon_name = notify_icon_name_from_desktop_id (desktop_id);
+        xfce_notify_window_set_icon_name (window, icon_name);
+        g_free (icon_name);
     }
 
     if (xndaemon->notification_log == TRUE &&
@@ -1348,7 +1363,8 @@ notify_notify (XfceNotifyGBus *skeleton,
         transient == FALSE)
         xfce_notify_log_insert (new_app_name, summary, body,
                                 image_data, image_path, app_icon,
-                                desktop_id, expire_timeout, actions);
+                                desktop_id, expire_timeout, actions,
+                                xndaemon->log_max_size);
 
     xfce_notify_window_set_icon_only(window, x_canonical);
 
@@ -1525,6 +1541,10 @@ xfce_notify_daemon_settings_changed(XfconfChannel *channel,
         xndaemon->log_level_apps = G_VALUE_TYPE(value)
                                   ? g_value_get_uint(value)
                                   : 0;
+    } else if(!strcmp(property, "/log-max-size")) {
+        xndaemon->log_max_size = G_VALUE_TYPE(value)
+                                 ? g_value_get_uint(value)
+                                 : 100;
     }
 }
 
@@ -1578,6 +1598,9 @@ xfce_notify_daemon_load_config (XfceNotifyDaemon *xndaemon,
     xndaemon->log_level_apps = xfconf_channel_get_uint(xndaemon->settings,
                                                         "/log-level-apps",
                                                         0);
+    xndaemon->log_max_size = xfconf_channel_get_uint(xndaemon->settings,
+                                                     "/log-max-size",
+                                                     100);
     /* Clean up old notifications from the backlog */
     xfconf_channel_reset_property (xndaemon->settings, "/backlog", TRUE);
 

@@ -171,7 +171,6 @@ list_store_add_themes_in_dir(GtkListStore *ls,
 {
     GDir *dir;
     const gchar *file;
-    gchar *filename;
     gchar *old_filename = NULL;
 
     dir = g_dir_open(path, 0, NULL);
@@ -179,6 +178,8 @@ list_store_add_themes_in_dir(GtkListStore *ls,
         return;
 
     while((file = g_dir_read_name(dir))) {
+        gchar *filename;
+
         if(g_hash_table_lookup(themes_seen, file))
             continue;
 
@@ -193,6 +194,7 @@ list_store_add_themes_in_dir(GtkListStore *ls,
                 else
                     gtk_list_store_prepend(ls, &iter);
                 g_free (old_filename);
+                old_filename = NULL;
             }
             else
                 gtk_list_store_append(ls, &iter);
@@ -205,8 +207,8 @@ list_store_add_themes_in_dir(GtkListStore *ls,
                 memcpy(current_theme_iter, &iter, sizeof(iter));
         }
 
-        old_filename = g_strdup (filename);
-        g_free(filename);
+        g_free (old_filename);
+        old_filename = filename;
     }
     g_free (old_filename);
 
@@ -404,8 +406,7 @@ xfce4_notifyd_known_applications_changed (XfconfChannel *channel,
             GdkPixbuf *pix = NULL;
             GtkIconInfo *icon_info = NULL;
             GtkIconInfo *icon_info_lower = NULL;
-            gchar const *desktop_icon_name = NULL;
-            gchar *icon_name_lower;
+            gchar *desktop_icon_name, *icon_name_lower;
 
             known_application = g_ptr_array_index (known_applications, i);
             hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
@@ -414,7 +415,7 @@ xfce4_notifyd_known_applications_changed (XfconfChannel *channel,
             icon_name = g_strdelimit ((gchar *) g_value_get_string (known_application)," ",'-');
             icon_name_lower = g_ascii_strdown (icon_name, -1);
             icon_info = gtk_icon_theme_lookup_icon (gtk_icon_theme_get_default(), icon_name, 24, GTK_ICON_LOOKUP_GENERIC_FALLBACK);
-            icon_info_lower = gtk_icon_theme_lookup_icon (gtk_icon_theme_get_default(), g_ascii_strdown (icon_name, -1), 24, GTK_ICON_LOOKUP_GENERIC_FALLBACK);
+            icon_info_lower = gtk_icon_theme_lookup_icon (gtk_icon_theme_get_default(), icon_name_lower, 24, GTK_ICON_LOOKUP_GENERIC_FALLBACK);
             desktop_icon_name = notify_icon_name_from_desktop_id (icon_name_lower);
             /* Find icons in the right priority: normal icon name with fallback, lowercase icon name with fallback,
                Desktop file icon property or empty. */
@@ -431,6 +432,8 @@ xfce4_notifyd_known_applications_changed (XfconfChannel *channel,
             else
                 icon = gtk_image_new ();
             g_free (icon_name_lower);
+            g_free (desktop_icon_name);
+            desktop_icon_name = NULL;
             if (pix)
                 g_object_unref (G_OBJECT (pix));
             gtk_image_set_pixel_size (GTK_IMAGE (icon), 24);
@@ -531,13 +534,12 @@ xfce4_notifyd_log_open (GtkButton *button, gpointer user_data) {
 static void
 xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
 {
-    GtkWidget *log_listbox = log_widgets->log_listbox;
+    GtkWidget *const log_listbox = log_widgets->log_listbox;
     GKeyFile *notify_log;
     GtkCallback func = listbox_remove_all;
     gint i;
     GDateTime *today;
     gchar *timestamp;
-    gchar *limit_label;
     GtkWidget *limit_button;
     gsize num_groups = 0;
     GdkPixbuf *pixbuf = NULL;
@@ -565,7 +567,7 @@ xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
         /* Notifications are only shown until LOG_DISPLAY_LIMIT is hit */
         for (i = log_length; groups && groups[i]; i += 1) {
             GtkWidget *grid;
-            GtkWidget *summary, *body, *app_icon, *expire_timeout;
+            GtkWidget *summary, *body, *app_icon;
             const gchar *group = groups[i];
             const char *format = "<b>\%s</b>";
             const char *tooltip_format_simple = "<b>\%s</b> - \%s";
@@ -573,15 +575,19 @@ xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
             gchar *app_name;
             gchar *tooltip_timestamp = NULL;
             gchar *tmp;
-            GTimeVal tv;
             GDateTime *log_timestamp;
+            GDateTime *local_timestamp = NULL;
 
-            if (g_time_val_from_iso8601 (group, &tv) == TRUE) {
-                log_timestamp = g_date_time_new_from_timeval_local (&tv);
-                if (log_timestamp != NULL) {
-                    tooltip_timestamp = g_date_time_format (log_timestamp, "%c");
-                    g_date_time_unref(log_timestamp);
-                }
+            log_timestamp = g_date_time_new_from_iso8601 (group, NULL);
+            if (log_timestamp != NULL)
+            {
+                local_timestamp = g_date_time_to_local (log_timestamp);
+                g_date_time_unref (log_timestamp);
+            }
+
+            if (local_timestamp != NULL) {
+                tooltip_timestamp = g_date_time_format (local_timestamp, "%c");
+                g_date_time_unref (local_timestamp);
             }
 
             if (g_ascii_strncasecmp (timestamp, group, 10) == 0 && yesterday == FALSE) {
@@ -608,6 +614,7 @@ xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
             g_free (markup);
             tmp = g_key_file_get_string (notify_log, group, "body", NULL);
             body = gtk_label_new (NULL);
+            g_object_ref (body);
             gtk_label_set_markup (GTK_LABEL (body), tmp);
             if (g_strcmp0 (gtk_label_get_text (GTK_LABEL (body)), "") == 0) {
                 gchar *tmp1;
@@ -638,9 +645,6 @@ xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
             g_free (notify_log_icon_path);
             g_free (tmp);
             gtk_widget_set_margin_start (app_icon, 3);
-            tmp = g_key_file_get_string (notify_log, group, "expire-timeout", NULL);
-            expire_timeout = gtk_label_new (tmp);
-            g_free (tmp);
             // TODO: actions and timeout are missing (timeout is only interesting for urgent messages) - do we need that?
             grid = gtk_grid_new ();
             gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
@@ -669,6 +673,9 @@ xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
             }
             g_free (tmp);
             g_free (app_name);
+            g_free (tooltip_timestamp);
+            g_object_unref (body);
+            body = NULL;
 
             gtk_widget_set_tooltip_markup (grid, markup);
             g_free (markup);
@@ -676,9 +683,12 @@ xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
             gtk_list_box_insert (GTK_LIST_BOX (log_listbox), grid, 0);
         }
         if (log_length > 0) {
+            gchar *limit_label;
             limit_label = g_strdup_printf("Showing %d of %d notifications. Click to open full log.",
                                           LOG_DISPLAY_LIMIT, GPOINTER_TO_UINT(num_groups));
             limit_button = gtk_button_new_with_label (limit_label);
+            g_free (limit_label);
+            limit_label = NULL;
             gtk_widget_set_margin_bottom (limit_button, 3);
             gtk_widget_set_margin_top (limit_button, 3);
             gtk_button_set_relief (GTK_BUTTON (limit_button), GTK_RELIEF_NONE);
@@ -690,7 +700,9 @@ xfce4_notifyd_log_populate (NotificationLogWidgets *log_widgets)
         g_key_file_free (notify_log);
     }
 
-    g_free(notify_log_icon_folder);
+    g_free (notify_log_icon_folder);
+    g_date_time_unref (today);
+    g_free (timestamp);
 
     gtk_widget_show_all (log_listbox);
 
@@ -920,6 +932,9 @@ xfce4_notifyd_config_setup_dialog(GtkBuilder *builder)
                            G_OBJECT(log_widgets.log_level), "active");
     xfconf_g_property_bind(channel, "/log-level-apps", G_TYPE_UINT,
                           G_OBJECT(log_widgets.log_level_apps), "active");
+    sbtn = GTK_WIDGET (gtk_builder_get_object (builder, "log_max_size"));
+    xfconf_g_property_bind(channel, "/log-max-size", G_TYPE_UINT,
+                           G_OBJECT(sbtn), "value");
 
     /* Initialize the settings' states correctly */
     if(gtk_combo_box_get_active(GTK_COMBO_BOX(log_widgets.log_level)) == -1)

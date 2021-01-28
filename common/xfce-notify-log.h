@@ -26,7 +26,7 @@
 
 GdkPixbuf *notify_pixbuf_from_image_data (GVariant *image_data);
 
-const gchar     *notify_icon_name_from_desktop_id (const gchar *desktop_id);
+gchar     *notify_icon_name_from_desktop_id (const gchar *desktop_id);
 
 GKeyFile  *xfce_notify_log_get (void);
 
@@ -38,8 +38,11 @@ void       xfce_notify_log_insert (const gchar *app_name,
                                    const gchar *app_icon,
                                    const gchar *desktop_id,
                                    gint expire_timeout,
-                                   const gchar **actions);
+                                   const gchar **actions,
+                                   gint log_max_size);
 
 GtkWidget *xfce_notify_clear_log_dialog (void);
+
+void xfce_notify_log_clear (void);
 
 #endif /* __XFCE_NOTIFY_LOG_H_ */

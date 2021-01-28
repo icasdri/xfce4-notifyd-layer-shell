@@ -84,10 +84,17 @@ notification_plugin_menu_clear (GtkWidget *widget, gpointer user_data)
 
 
 static void
-notification_plugin_clear_log_dialog (void) {
-  GtkWidget *dialog;
+notification_plugin_clear_log_dialog (GtkWidget *widget, gpointer user_data)
+{
+  NotificationPlugin* notification_plugin = user_data;
+	
+	if (xfconf_channel_get_bool (notification_plugin->channel, SETTING_HIDE_CLEAR_PROMPT, FALSE))
+	{
+	  xfce_notify_log_clear ();
+	  return;
+	}
 
-  dialog = xfce_notify_clear_log_dialog ();
+  GtkWidget *dialog = xfce_notify_clear_log_dialog ();
   gtk_dialog_run (GTK_DIALOG (dialog));
   gtk_widget_destroy (dialog);
 }
@@ -195,8 +202,8 @@ notification_plugin_menu_populate (NotificationPlugin *notification_plugin)
       gchar *app_name;
       gchar *tooltip_timestamp = NULL;
       gchar *tmp;
-      GTimeVal tv;
       GDateTime *log_timestamp;
+      GDateTime *local_timestamp = NULL;
 
       /* optionally only show notifications from today */
       if (log_only_today == TRUE) {
@@ -211,12 +218,17 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       mi = gtk_image_menu_item_new ();
 G_GNUC_END_IGNORE_DEPRECATIONS
 
-      if (g_time_val_from_iso8601 (group, &tv) == TRUE) {
-        log_timestamp = g_date_time_new_from_timeval_local (&tv);
-        if (log_timestamp != NULL) {
-          tooltip_timestamp = g_date_time_format (log_timestamp, "%c");
-          g_date_time_unref(log_timestamp);
-        }
+      log_timestamp = g_date_time_new_from_iso8601 (group, NULL);
+
+      if (log_timestamp != NULL)
+      {
+        local_timestamp = g_date_time_to_local (log_timestamp);
+        g_date_time_unref (log_timestamp);
+      }
+
+      if (local_timestamp != NULL) {
+        tooltip_timestamp = g_date_time_format (local_timestamp, "%c");
+        g_date_time_unref (local_timestamp);
       }
 
       app_name = g_key_file_get_string (notify_log, group, "app_name", NULL);
@@ -295,6 +307,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       }
       g_free (tmp);
       g_free (app_name);
+      g_free (tooltip_timestamp);
 
       gtk_widget_set_tooltip_markup (mi, markup);
       g_free (markup);
@@ -309,6 +322,10 @@ G_GNUC_END_IGNORE_DEPRECATIONS
     if (numberof_notifications_shown > 0)
       no_notifications = FALSE;
   }
+
+  g_free (timestamp);
+  g_date_time_unref (today);
+
   /* Show a placeholder label when there are no notifications */
   if (!notify_log ||
       no_notifications) {
@@ -342,7 +359,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);
   gtk_widget_show (mi);
   g_signal_connect (mi, "activate", G_CALLBACK (notification_plugin_clear_log_dialog),
-                    NULL);
+                    notification_plugin);
 
   mi = gtk_menu_item_new_with_mnemonic (_("_Notification settings…"));
   gtk_menu_shell_append (GTK_MENU_SHELL (menu), mi);

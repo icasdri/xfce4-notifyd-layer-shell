@@ -47,6 +47,8 @@
 #define FADE_CHANGE_TIMEOUT    50
 #define DEFAULT_RADIUS         10
 #define DEFAULT_PADDING        14.0
+#define BASE_CSS               ".xfce4-notifyd { font-size: initial; }"
+#define NO_COMPOSITING_CSS     ".xfce4-notifyd { border-radius: 0px; }"
 
 struct _XfceNotifyWindow
 {
@@ -304,21 +306,22 @@ xfce_notify_window_init(XfceNotifyWindow *window)
 
     gtk_style_context_add_class (gtk_widget_get_style_context (GTK_WIDGET (window)), "xfce4-notifyd");
     provider = gtk_css_provider_new ();
-    gtk_css_provider_load_from_data (provider, ".xfce4-notifyd { font-size: initial; }", -1, NULL);
+    gtk_css_provider_load_from_data (provider, BASE_CSS, -1, NULL);
     gtk_style_context_add_provider (gtk_widget_get_style_context (GTK_WIDGET (window)),
                                     GTK_STYLE_PROVIDER (provider),
                                     GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref (provider);
 }
 
 static void
 xfce_notify_window_start_expiration(XfceNotifyWindow *window)
 {
     if(window->expire_timeout) {
-        GTimeVal ct;
+        gint64 ct;
         guint timeout;
         gboolean fade_transparent;
 
-        g_get_current_time(&ct);
+        ct = g_get_real_time();
 
         fade_transparent =
             gdk_screen_is_composited(gtk_window_get_screen(GTK_WINDOW (window)));
@@ -330,7 +333,7 @@ xfce_notify_window_start_expiration(XfceNotifyWindow *window)
         else
             timeout = FADE_TIME;
 
-        window->expire_start_timestamp = ct.tv_sec * 1000 + ct.tv_usec / 1000;
+        window->expire_start_timestamp = ct / 1000;
         window->expire_id = g_timeout_add(timeout,
                                           xfce_notify_window_expire_timeout,
                                           window);
@@ -380,17 +383,37 @@ static gboolean
 xfce_notify_window_draw (GtkWidget *widget,
                          cairo_t *cr)
 {
-    GtkStyleContext *context;
-    GtkAllocation    allocation;
+    GtkStyleContext  *context;
+    GtkAllocation     allocation;
+    GdkScreen        *screen;
+    GtkCssProvider   *provider;
+    GtkStateFlags     state;
+    XfceNotifyWindow *window = XFCE_NOTIFY_WINDOW (widget);
+
+    state = GTK_STATE_FLAG_NORMAL;
+    if (window->mouse_hover)
+        state = GTK_STATE_FLAG_PRELIGHT;
 
     context = gtk_widget_get_style_context (widget);
     gtk_widget_get_allocation (widget, &allocation);
+
+    /* Remove rounded corners when compositing is disabled */
+    screen = gtk_widget_get_screen (widget);
+    if (!gdk_screen_is_composited (screen)) {
+        provider = gtk_css_provider_new ();
+        gtk_css_provider_load_from_data (provider, NO_COMPOSITING_CSS, -1, NULL);
+        gtk_style_context_add_provider (context,
+                                        GTK_STYLE_PROVIDER (provider),
+                                        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        g_object_unref (provider);
+    }
 
     /* First make the window transparent */
     cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 0.0);
     cairo_fill (cr);
 
     /* Then render the background and border based on the Gtk theme */
+    gtk_style_context_set_state (context, state);
     gtk_render_background (context, cr, allocation.x, allocation.y, allocation.width, allocation.height);
     gtk_render_frame (context, cr, allocation.x, allocation.y, allocation.width, allocation.height);
 
@@ -758,7 +781,6 @@ xfce_notify_window_set_icon_name (XfceNotifyWindow *window,
                                   const gchar *icon_name)
 {
     gboolean icon_set = FALSE;
-    gchar *filename;
 
     g_return_if_fail (XFCE_IS_NOTIFY_WINDOW (window));
 
@@ -773,7 +795,7 @@ xfce_notify_window_set_icon_name (XfceNotifyWindow *window,
             pix = gdk_pixbuf_new_from_file_at_size (icon_name, w, h, NULL);
         }
         else if (g_str_has_prefix (icon_name, "file://")) {
-            filename = g_filename_from_uri (icon_name, NULL, NULL);
+            gchar *filename = g_filename_from_uri (icon_name, NULL, NULL);
             if (filename)
               pix = gdk_pixbuf_new_from_file_at_size (filename, w, h, NULL);
             g_free (filename);
